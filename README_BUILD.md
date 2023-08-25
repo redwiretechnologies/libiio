@@ -107,6 +107,7 @@ Cmake Options       | Default | Description                                    |
 `WITH_IIOD`         |  ON | Build the IIO Daemon                                 |
 `WITH_IIOD_SERIAL`  |  ON | Add serial (UART) support                            |
 `WITH_IIOD_USBD`    |  ON | Add support for USB through FunctionFS within IIOD   |
+`WITH_IIOD_USB_DMABUF` | OFF | Enable DMABUF support on the USB stack            |
 `WITH_AIO`          |  ON | Build IIOD with async. I/O support                   |
 `WITH_SYSTEMD`      | OFF | Enable installation of systemd service file for iiod |
 `SYSTEMD_UNIT_INSTALL_DIR`  | /lib/systemd/system | default install path for systemd unit files |
