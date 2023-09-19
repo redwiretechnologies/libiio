@@ -22,6 +22,8 @@ struct iio_block {
 	struct iio_task_token *token, *old_token;
 	size_t bytes_used;
 	bool cyclic;
+
+	int dmabuf_fd;
 };
 
 struct iio_block *
@@ -42,13 +44,19 @@ iio_buffer_create_block(struct iio_buffer *buf, size_t size)
 	if (!block)
 		return iio_ptr(-ENOMEM);
 
+	block->dmabuf_fd = -EINVAL;
+
 	if (ops->create_block) {
 		pdata = ops->create_block(buf->pdata, size, &block->data);
 		ret = iio_err(pdata);
-		if (!ret)
+		if (!ret) {
 			block->pdata = pdata;
-		else if (ret != -ENOSYS)
+
+			if (ops->get_dmabuf_fd)
+				block->dmabuf_fd = ops->get_dmabuf_fd(pdata);
+		} else if (ret != -ENOSYS) {
 			goto err_free_block;
+		}
 	}
 
 	if (!block->pdata) {
@@ -101,10 +109,10 @@ void iio_block_destroy(struct iio_block *block)
 	iio_mutex_unlock(buf->lock);
 }
 
-static int
-iio_block_write(struct iio_block *block, size_t bytes_used)
+static int iio_block_write(struct iio_block *block)
 {
 	const struct iio_backend_ops *ops = block->buffer->dev->ctx->ops;
+	size_t bytes_used = block->bytes_used;
 	ssize_t ret;
 
 	if (!ops->writebuf)
@@ -117,12 +125,13 @@ iio_block_write(struct iio_block *block, size_t bytes_used)
 static int iio_block_read(struct iio_block *block)
 {
 	const struct iio_backend_ops *ops = block->buffer->dev->ctx->ops;
+	size_t bytes_used = block->bytes_used;
 	ssize_t ret;
 
 	if (!ops->readbuf)
 		return -ENOSYS;
 
-	ret = ops->readbuf(block->buffer->pdata, block->data, block->size);
+	ret = ops->readbuf(block->buffer->pdata, block->data, bytes_used);
 	return ret < 0 ? (int) ret : 0;
 }
 
@@ -139,7 +148,7 @@ int iio_block_io(struct iio_block *block)
 		block->token = iio_task_enqueue(block->buffer->worker, block);
 	}
 
-	return iio_block_write(block, block->bytes_used);
+	return iio_block_write(block);
 }
 
 int iio_block_enqueue(struct iio_block *block, size_t bytes_used, bool cyclic)
@@ -147,6 +156,12 @@ int iio_block_enqueue(struct iio_block *block, size_t bytes_used, bool cyclic)
 	const struct iio_buffer *buffer = block->buffer;
 	const struct iio_device *dev = buffer->dev;
 	const struct iio_backend_ops *ops = dev->ctx->ops;
+
+	if (bytes_used > block->size)
+		return -EINVAL;
+
+	if (!bytes_used)
+		bytes_used = block->size;
 
 	if (ops->enqueue_block && block->pdata)
 		return ops->enqueue_block(block->pdata, bytes_used, cyclic);
@@ -299,4 +314,19 @@ iio_block_foreach_sample(const struct iio_block *block,
 struct iio_buffer * iio_block_get_buffer(const struct iio_block *block)
 {
 	return block->buffer;
+}
+
+int iio_block_get_dmabuf_fd(const struct iio_block *block)
+{
+	return block->dmabuf_fd;
+}
+
+int iio_block_disable_cpu_access(struct iio_block *block, bool disable)
+{
+	const struct iio_backend_ops *ops = block->buffer->dev->ctx->ops;
+
+	if (ops->disable_cpu_access)
+		return ops->disable_cpu_access(block->pdata, disable);
+
+	return -ENOSYS;
 }

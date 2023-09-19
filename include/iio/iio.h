@@ -1246,6 +1246,25 @@ iio_buffer_create_block(struct iio_buffer *buffer, size_t size);
 __api void iio_block_destroy(struct iio_block *block);
 
 
+/** @brief Get the file descriptor of the underlying DMABUF object
+ * @param block A pointer to an iio_block structure
+ * @return The file descriptor of the underlying DMABUF object.
+ * If the iio_block is not backed by a DMABUF object, -EINVAL is returned.
+ * Otherwise, the file descriptor will be valid until the block is destroyed. */
+__api __check_ret int iio_block_get_dmabuf_fd(const struct iio_block *block);
+
+
+/** @brief Disable CPU access of a given block
+ * @param block A pointer to an iio_block structure
+ * @param disable Whether or not to disable CPU access
+ *
+ * <b>NOTE:</b>Disabling CPU access is useful when manipulating DMABUF objects.
+ * If CPU access is disabled, the block's internal buffer of samples should not
+ * be accessed. Therefore, the following functions should not be called:
+ * iio_block_start, iio_block_first, iio_block_end, iio_block_foreach_sample. */
+__api int iio_block_disable_cpu_access(struct iio_block *block, bool disable);
+
+
 /** @brief Get the start address of the block
  * @param buf A pointer to an iio_block structure
  * @return A pointer corresponding to the start address of the block */
@@ -1305,8 +1324,8 @@ iio_block_foreach_sample(const struct iio_block *block,
 
 /** @brief Enqueue the given iio_block to the buffer's queue
  * @param block A pointer to an iio_block structure
- * @param bytes_used The size of the data from the iio_block to be written,
- *   in bytes
+ * @param bytes_used The amount of data in bytes to be transferred (either
+ * transmitted or received). If zero, the size of the block is used.
  * @param cyclic If True, enable cyclic mode. The block's content will be
  * repeated on the hardware's output until the buffer is cancelled or destroyed.
  * @return On success, 0 is returned
